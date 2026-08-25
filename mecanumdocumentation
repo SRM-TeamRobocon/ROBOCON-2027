@@ -1,0 +1,23 @@
+TO RUN MECANUM WHEELS WITH ODOMETRY:
+
+JETSON SIDE:
+1. RUN MICROROS (9999)
+2. RUN JOY NODE
+3. RUN mecanum_odo.py (from github)
+
+TEENSY SIDE:
+1. UPLOAD mecanum_odometry.ino TO THE TEENSY
+
+
+ARCHITECTURE OF THE CODE:
+
+_________________________________________________________________________________________________
+| Topic          | Publisher             | Subscriber            | Purpose                      |
+| -------------- | --------------------- | --------------------- | ---------------------------- |
+| `/joy`         | joy_node              | JetsonRobotController | Controller joystick input    |
+| `/target_rpm`  | JetsonRobotController | Teensy micro-ROS node | Individual wheel target RPMs |
+| `/teensy_odom` | Teensy micro-ROS node | JetsonRobotController | Robot X, Y and heading       |
+-------------------------------------------------------------------------------------------------
+
+Debug Accordingly
+
