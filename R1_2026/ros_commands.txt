@@ -1,0 +1,23 @@
+RUN MICROROS AGENT (SOURCE microros_ws)
+
+ros2 run micro_ros_agent micro_ros_agent udp4 --port 9999
+
+RUN JOY NODE
+
+COSMICBYTE MAC ADDRESS - 5F:FE:AA:05:06:07
+
+LIST OF bluetoothctl commands -
+
+scan on
+scan off
+pair <address>
+trust <address>
+connect <address>
+
+remove <address>
+
+ros2 run joy joy_node --ros-args -r __node:=joy_node_robot1 -r joy:=/robot1/joy
+
+ECHO /robot1/joy TO MAKE SURE CONTROLLER IS GIVING CORRECT VALUES
+
+RUN main_brain.py in /microros_ws/src/tuning/tuning
