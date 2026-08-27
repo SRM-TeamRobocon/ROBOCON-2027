@@ -362,7 +362,7 @@ void setup() {
   kfsgrip.write(90);
   staffwrist.write(80);
   staffgrip.write(40);
-  arucoservo.attach(21);
+  // arucoservo.attach(21);
   arucoservo.write(0);
 
   // ETHERNET
