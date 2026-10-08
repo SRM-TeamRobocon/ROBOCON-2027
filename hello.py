@@ -1,0 +1,1 @@
+print("Hello, welcome to ROBOCON 2027!")
