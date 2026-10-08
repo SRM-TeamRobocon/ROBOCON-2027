@@ -32,7 +32,7 @@ class AlignmentNode(Node):
 
         self.get_logger().info("Alignment node initialized and waiting for start signal.")
 
-    def start_align_callback(self, msg: Bool):
+    def start_align_callback(self, msg: Bool):  # waits for true value from start_align
         """Updates internal enable flag and resets completion status on rising edge."""
         previous_state = self.start_align
         self.start_align = msg.data
@@ -82,15 +82,15 @@ class AlignmentNode(Node):
 
         # 3. Distance error calculation
         if length < self.min_length:
-            lengthDifference = self.min_length - length    # Target too far -> Move Forward (+)
+            lengthDifference = self.min_length - length    
         elif length > self.max_length:
-            lengthDifference = self.max_length - length    # Target too close -> Move Backward (-)
+            lengthDifference = self.max_length - length    
 
         # 4. Lateral error calculation
         if x1 < self.margin1:
-            xdifference = self.margin1 - x1               # Target on left -> Strafe Left (-)
+            xdifference = self.margin1 - x1               
         elif x2 > self.margin2:
-            xdifference = self.margin2 - x2               # Target on right -> Strafe Right (+)
+            xdifference = self.margin2 - x2               
 
         # 5. Velocity / Command Mapping (-250 to 250 RPM range)
         forward = self.map_value(lengthDifference, -0.5, 0.5, -250.0, 250.0)
@@ -116,7 +116,7 @@ class AlignmentNode(Node):
             self.stop_motors()
             if not self.align_confirmed:
                 self.align_confirmed = True
-                self.publish_align_status(True)
+                self.publish_align_status(True)    #assigns true to align_confirmed and publishes to align_confirmed topic
                 self.get_logger().info("Target aligned! Motor commands within absolute threshold of 1.0.")
             else:
                 self.publish_align_status(True)
@@ -124,7 +124,7 @@ class AlignmentNode(Node):
 
         # Target drifted outside tolerance: reset alignment confirmation
         if self.align_confirmed:
-            self.align_confirmed = False
+            self.align_confirmed = False    
             self.publish_align_status(False)
 
         # 9. Publish target RPM
