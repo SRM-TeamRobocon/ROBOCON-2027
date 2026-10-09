@@ -15,22 +15,25 @@
 #include <Adafruit_BNO055.h>
 #include <utility/imumaths.h>
 
-#define MAX_PWM 250
+#define MAX_RPM 250
 #define NUM_MOTORS 4
+
+float rpm_cmd[4];
+
 
 // Motor pins: FL, FR, RL, RR
 int drive_omni[4][2] = {
-  {1, 0},
-  {5, 4},
-  {13, 12},
-  {23, 22}
+  {6, 7},
+  {4, 5},
+  {0, 1},
+  {2, 3}
 };
 
 Encoder m[4] = {
-  Encoder(21, 20),
-  Encoder(26, 27),
-  Encoder(40, 41),
-  Encoder(32, 33)
+  Encoder(34, 35),
+  Encoder(16, 17),
+  Encoder(41, 40),
+  Encoder(26, 27)
 };
 
 float dt = 0.075;
@@ -45,6 +48,12 @@ rclc_executor_t executor;
 rcl_allocator_t allocator;
 rclc_support_t support;
 rcl_node_t node;
+
+const int FORWARD_SIGN = 1;   // dead wheel that measures robot-forward
+const int STRAFE_SIGN  = 1;   // dead wheel that measures robot-left
+const int HEADING_SIGN = 1;  // BNO055 is clockwise-positive, so -1 gives CCW-positive
+
+double headingOffset = 0.0;   // makes the start pose 0 deg
 
 IntervalTimer motorTimer;
 
@@ -70,19 +79,27 @@ volatile float rpm_rt[4] = {0, 0, 0, 0};
 
 float cpr[] = {3500.0, 3500.0, 3500.0, 3500.0};
 
-// Odometry
-Adafruit_BNO055 bno = Adafruit_BNO055(55, 0x28, &Wire1);
+// yaw correction
+#define YAW_TOL 2.0          // degrees
+#define YAW_DEADBAND 0.5     // degrees
 
-Encoder forwardWheelEncoder(29, 28);
-Encoder strafeWheelEncoder(30, 31);
+float rotate_kp = 2.0;
+
+volatile float currentYawDegrees = 0.0;
+
+// Odometry
+Adafruit_BNO055 bno = Adafruit_BNO055(55, 0x28, &Wire);
+
+Encoder forwardWheelEncoder(21, 20);
+Encoder strafeWheelEncoder(33, 32);
 
 const double ENCODER_CPR = 2400.0;
 const double DEAD_WHEEL_DIAMETER_MM = 57.8;
 const double DEAD_WHEEL_CIRCUMFERENCE_MM = PI * DEAD_WHEEL_DIAMETER_MM;
 const double MM_PER_ENCODER_TICK = DEAD_WHEEL_CIRCUMFERENCE_MM / ENCODER_CPR;
 
-const double FORWARD_WHEEL_OFFSET_MM = -120.0;
-const double STRAFE_WHEEL_OFFSET_MM = -92.0;
+const double FORWARD_WHEEL_OFFSET_MM = 33.0;
+const double STRAFE_WHEEL_OFFSET_MM = 235.0;
 
 double robotFieldX = 0.0;
 double robotFieldY = 0.0;
@@ -117,41 +134,118 @@ float odom_data[3];
 void drive(int pwmL, int pwmR, int pwm) {
   analogWrite(pwmL, pwm < 0 ? -pwm : 0);
   analogWrite(pwmR, pwm > 0 ? pwm : 0);
+} 
+
+void updateImu() {
+  sensors_event_t event;
+  bno.getEvent(&event, Adafruit_BNO055::VECTOR_EULER);
+
+  currentYawDegrees = event.orientation.x;
+
+  // Convert 0–360 to -180–180
+  if (currentYawDegrees > 180.0) {
+    currentYawDegrees -= 360.0;
+  }
+}
+
+float getYawCorrection() {
+  float yaw = currentYawDegrees; // 0 to 359
+
+  // Convert 0–360 to -180–180
+  if (yaw > 180.0) {
+    yaw -= 360.0;
+  }
+
+  // Small error = exactly zero
+  if (abs(yaw) < YAW_DEADBAND) {
+    yaw = 0;
+  }
+
+  float w = 0;
+
+  if (abs(yaw) > YAW_TOL) {
+    w = -rotate_kp * yaw;
+    w = constrain(w, -80, 80);
+  } else {
+    w = 0;
+  }
+
+  return w;
 }
 
 // Motor PID update
 void motor_update() {
+  // for (int i = 0; i < 4; i++) {
+  //   newPosition[i] = m[i].read();
+  //   ::count[i] = abs(newPosition[i] - oldPosition[i]);
+  //   rpm_rt[i] = ::count[i] / cpr[i] * 600 * 4.0 / 3;
+  //   rpm_rt[i] *= newPosition[i] < oldPosition[i] ? -1 : 1;
+  //   ::count[i] = 0;
+  //   oldPosition[i] = newPosition[i];
+  // }
+  
+
+  // float rpm_cmd[4];
+  float w = getYawCorrection();
+  Serial.println(w);
+
+  // Original commands
+  float fl = motor_pwm[0];
+  float fr = motor_pwm[1];
+  float rl = motor_pwm[2];
+  float rr = motor_pwm[3];
+
+  // float fl = 0;
+  // float fr = 0;
+  // float rl = 0;
+  // float rr = 0;
+
+  // Add yaw correction
+  fl += w;
+  fr += w;
+  rl += w;
+  rr += w;
+
+  // Limit commands
+  fl = constrain(fl, -MAX_RPM, MAX_RPM);
+  fr = constrain(fr, -MAX_RPM, MAX_RPM);
+  rl = constrain(rl, -MAX_RPM, MAX_RPM);
+  rr = constrain(rr, -MAX_RPM, MAX_RPM);
+
+  rpm_cmd[0] = fl;
+  rpm_cmd[1] = fr;
+  rpm_cmd[2] = rl;
+  rpm_cmd[3] = rr;
+
+  // for (int i = 0; i < 4; i++) {
+  //   rpm_cmd[i] = motor_pwm[i];
+  // }
+
   for (int i = 0; i < 4; i++) {
-    newPosition[i] = m[i].read();
-    ::count[i] = abs(newPosition[i] - oldPosition[i]);
-    rpm_rt[i] = ::count[i] / cpr[i] * 600 * 4.0 / 3;
-    rpm_rt[i] *= newPosition[i] < oldPosition[i] ? -1 : 1;
-    ::count[i] = 0;
-    oldPosition[i] = newPosition[i];
+    // error[i] = rpm_cmd[i] - rpm_rt[i];
+    // eDer[i] = (error[i] - lastError[i]) / dt;
+    // eInt[i] = eInt[i] + error[i] * dt;
+
+    // pwm_pid[i] = int(kp[i] * error[i] + 0 * eInt[i] + kd[i] * eDer[i]);
+
+    // pwm_pid[i] = pwm_pid[i] % 16383;
+    // float output = kp[i] * error[i] + ki[i] * eInt[i] + kd[i] * eDer[i];
+
+    // pwm_pid[i] = constrain(pwm_pid[i], -16383.0f, 16383.0f);
+
+    // pwm_pid[i] = (int)output;
+
+    rpm_cmd[i] = map(rpm_cmd[i], -250, 250, -13000, 13000);
+
+    drive(drive_omni[i][0], drive_omni[i][1], (int)rpm_cmd[i]);
+
+    // lastError[i] = error[i];
+
   }
-
-  float rpm_cmd[4];
-
-  for (int i = 0; i < 4; i++) {
-    rpm_cmd[i] = motor_pwm[i];
-  }
-
-  for (int i = 0; i < 4; i++) {
-    error[i] = rpm_cmd[i] - rpm_rt[i];
-    eDer[i] = (error[i] - lastError[i]) / dt;
-    eInt[i] = eInt[i] + error[i] * dt;
-
-    pwm_pid[i] = int(kp[i] * error[i] + ki[i] * eInt[i] + kd[i] * eDer[i]);
-
-    pwm_pid[i] = pwm_pid[i] % 16383;
-
-    drive(drive_omni[i][0], drive_omni[i][1], (int)pwm_pid[i]);
-
-    lastError[i] = error[i];
-
-    Serial.printf("RPM_output(motor-%d:%0.2f\n", i + 1, rpm_rt[i]);
-    Serial.printf("RPM_%d_input:%0.2f\n", i + 1, rpm_cmd[i]);
-  }
+  // for (int i=0; i<=3; i++){
+    // Serial.printf("RPM_output(motor-%d:%0.2f\n", i + 1, rpm_cmd[i]);
+    // Serial.printf("RPM_%d_input:%0.2f\n", i + 1, rpm_cmd[i]);
+  // }
 }
 
 // Normalize angle
@@ -165,34 +259,38 @@ double normalizeAngle(double angle) {
 double readImuHeading() {
   sensors_event_t event;
   bno.getEvent(&event, Adafruit_BNO055::VECTOR_EULER);
-
-  double heading = event.orientation.x * PI / 180.0;
-
-  return normalizeAngle(heading);
+  double raw = event.orientation.x * PI / 180.0;
+  return normalizeAngle(HEADING_SIGN * (raw - headingOffset));
 }
 
 // Update odometry
 void updateOdometry() {
-  long currentForward = forwardWheelEncoder.read();
-  long currentStrafe = strafeWheelEncoder.read();
-  double currentHeading = readImuHeading();
-
-  robotHeadingRadians = currentHeading;
+  long currentForward = FORWARD_SIGN * forwardWheelEncoder.read();
+  long currentStrafe  = STRAFE_SIGN  * strafeWheelEncoder.read();
 
   if (!odometryInitialized) {
+    // capture the starting heading so the start pose is 0 deg
+    sensors_event_t event;
+    bno.getEvent(&event, Adafruit_BNO055::VECTOR_EULER);
+    headingOffset = event.orientation.x * PI / 180.0;
+
     previousForwardWheelTicks = currentForward;
     previousStrafeWheelTicks = currentStrafe;
-    previousHeadingRadians = currentHeading;
+    previousHeadingRadians = 0.0;
+    robotHeadingRadians = 0.0;
     odometryInitialized = true;
     return;
   }
 
+  double currentHeading = readImuHeading();
+  robotHeadingRadians = currentHeading;
+
   double dForward = (currentForward - previousForwardWheelTicks) * MM_PER_ENCODER_TICK;
-  double dStrafe = (currentStrafe - previousStrafeWheelTicks) * MM_PER_ENCODER_TICK;
+  double dStrafe  = (currentStrafe  - previousStrafeWheelTicks)  * MM_PER_ENCODER_TICK;
   double dHeading = normalizeAngle(currentHeading - previousHeadingRadians);
 
-  double robotForward = dForward - FORWARD_WHEEL_OFFSET_MM * dHeading;
-  double robotSideways = dStrafe - STRAFE_WHEEL_OFFSET_MM * dHeading;
+  double robotForward  = dForward - FORWARD_WHEEL_OFFSET_MM * dHeading;
+  double robotSideways = dStrafe  - STRAFE_WHEEL_OFFSET_MM  * dHeading;
 
   double avgHeading = previousHeadingRadians + dHeading / 2.0;
 
@@ -204,6 +302,7 @@ void updateOdometry() {
   previousHeadingRadians = currentHeading;
 }
 
+
 // ROS callback
 void subscription_callback(const void *msgin) {
   const std_msgs__msg__Float32MultiArray *incoming = (const std_msgs__msg__Float32MultiArray *)msgin;
@@ -212,10 +311,17 @@ void subscription_callback(const void *msgin) {
     return;
   }
 
-  motor_pwm[0] = constrain(incoming->data.data[0], -MAX_PWM, MAX_PWM);
-  motor_pwm[1] = constrain(incoming->data.data[1], -MAX_PWM, MAX_PWM);
-  motor_pwm[2] = constrain(incoming->data.data[2], -MAX_PWM, MAX_PWM);
-  motor_pwm[3] = constrain(incoming->data.data[3], -MAX_PWM, MAX_PWM);
+  motor_pwm[0] = constrain(incoming->data.data[0], -MAX_RPM, MAX_RPM);
+  motor_pwm[1] = constrain(incoming->data.data[1], -MAX_RPM, MAX_RPM);
+  motor_pwm[2] = constrain(incoming->data.data[2], -MAX_RPM, MAX_RPM);
+  motor_pwm[3] = constrain(incoming->data.data[3], -MAX_RPM, MAX_RPM);
+
+  // for (int i=0; i<=3; i++){
+  //   Serial.printf("motor_pwm(motor-%d:%0.2f\n", i + 1, pwm_pid[i]);
+  //   // Serial.printf("RPM_%d_input:%0.2f\n", i + 1, rpm_cmd[i]);
+  // }
+
+
 }
 
 // Teensy MAC
@@ -232,6 +338,7 @@ void get_teensy_mac(uint8_t *mac) {
 void setup() {
   Serial.begin(115200);
   delay(2000);
+  Serial.print("hi");
 
   analogWriteResolution(14);
 
@@ -331,10 +438,14 @@ void readPIDTuning() {
 }
 
 void loop() {
-  readPIDTuning();
 
   RCSOFTCHECK(rclc_executor_spin_some(&executor, RCL_MS_TO_NS(10)));
 
+  updateImu();
+  // for (int i=0; i<=3; i++){
+  //   Serial.printf("RPM_output(motor-%d:%0.2f\n", i + 1, eInt[i]);
+  //   // Serial.printf("RPM_%d_input:%0.2f\n", i + 1, rpm_cmd[i]);
+  // }
   unsigned long now = millis();
 
   if (now - lastOdomPublishTime >= ODOM_PUBLISH_INTERVAL) {
