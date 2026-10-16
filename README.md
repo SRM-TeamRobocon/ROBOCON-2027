@@ -22,7 +22,7 @@ ABU ROBOCON is an international robotics competition that challenges teams to de
 - **Processing:** NVIDIA Jetson, OpenCV, CUDA, ROS 2
 - **Electronics:** Altium Designer
 - **Mechanical:** SolidWorks for CAD and mechanism design
-- **Languages:** C, C++, Python
+- **Languages:** C, C++, Python, Embedded C
 - **Frameworks:** YOLO, PyTorch, TensorRT, Docker
 - **Collaboration:** GitHub Projects, Issues, and CI/CD
 
