@@ -1,0 +1,10 @@
+#!/bin/bash
+
+# 1. Bring the CAN interface down to configure it
+sudo ip link set can0 down
+
+# 2. Bring the CAN interface up and set the bitrate (default for Robstride is usually 1 Mbps)
+sudo ip link set can0 up type can bitrate 1000000
+
+# 3. Start dumping the CAN traffic to the terminal to verify the motor is broadcasting
+candump can0
