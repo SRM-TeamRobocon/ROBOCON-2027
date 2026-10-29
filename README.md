@@ -16,6 +16,39 @@ ABU ROBOCON is an international robotics competition that challenges teams to de
 - 🛠 Mechanical Design – SolidWorks-based CAD modeling, simulation, and prototyping of mechanisms.
 - 🧪 Simulation & Testing – Tools and frameworks for debugging, validation, and iterative development before deployment.
 
+## RealSense YOLO
+
+`realsense/main.py` reads color and aligned depth images from ROS 2 topics. Start the RealSense ROS 2 camera driver first, then run the script in a second terminal. Both terminals must use the same ROS 2 distribution and domain.
+
+### Terminal 1: start the camera
+
+Source ROS 2, then launch the RealSense camera with depth aligned to color and color/depth synchronization enabled:
+
+```bash
+source /opt/ros/<ros-distro>/setup.bash
+ros2 launch realsense2_camera rs_launch.py enable_color:=true enable_depth:=true enable_sync:=true align_depth.enable:=true
+```
+
+Confirm the expected topics are present:
+
+```bash
+ros2 topic list | grep -E '^/camera/(color/image_raw|aligned_depth_to_color/image_raw)$'
+```
+
+The script expects `/camera/color/image_raw` and `/camera/aligned_depth_to_color/image_raw`. If your camera uses a different namespace, update `COLOR_TOPIC` and `DEPTH_TOPIC` in `realsense/main.py`.
+
+### Terminal 2: run YOLO
+
+Source the same ROS 2 distribution (and your workspace overlay, if applicable), then run:
+
+```bash
+source /opt/ros/<ros-distro>/setup.bash
+# source <workspace>/install/setup.bash  # if using a ROS 2 workspace overlay
+python3 realsense/main.py
+```
+
+Use a Python environment where `cv_bridge`, OpenCV, NumPy, PyTorch, Ultralytics, and the required CUDA/TensorRT dependencies are available. Set `MODEL_PATH` in `realsense/main.py` to the location of `best.engine` on your machine. An OpenCV window shows the YOLO preview; press `q` to close it. Detection bounds and depth are published on `/bb_vals` as `geometry_msgs/Vector3` (`x` = left bound, `y` = right bound, `z` = depth in meters). Depth images with `16UC1` (millimeters) or `32FC1` (meters) encoding are supported.
+
 # Tech Stack
 
 - **Embedded:** Teensy 4.1
