@@ -1,1 +1,1 @@
-maa chuda
+testing ruleset
