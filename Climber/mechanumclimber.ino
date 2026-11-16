@@ -23,11 +23,11 @@ byte mac[] = {0x04, 0xE9, 0xE5, 0x00, 0x00, 0x04};
 // RACK AND PINION
 // ================================================================
 
-const int RP1[2] = {23, 22};
-const int RP2[2] = {13, 12};
+const int RP1[2] = {8, 9};
+const int RP2[2] = {10, 11};
 
-const int encRP1[2] = {21, 20};
-const int encRP2[2] = {29, 28};
+const int encRP1[2] = {32, 33}; //32 33
+const int encRP2[2] = {21, 20}; //21 20
 
 Encoder enc1(encRP1[0], encRP1[1]);
 Encoder enc2(encRP2[0], encRP2[1]);
@@ -36,8 +36,8 @@ Encoder enc2(encRP2[0], encRP2[1]);
 // LIMIT SWITCHES
 // ================================================================
 
-const int RP1_LIMIT_PIN = 9;
-const int RP2_LIMIT_PIN = 8;
+const int RP1_LIMIT_PIN = 36;
+const int RP2_LIMIT_PIN = 37;
 
 bool rp1_limit_active = false;
 bool rp2_limit_active = false;
@@ -54,10 +54,10 @@ bool rp2_limit_active = false;
 // Pin order: Forward, Reverse
 
 const int traction[4][2] = {
-    {3, 2},
-    {0, 1},
-    {37, 36},
-    {5, 4}
+    {1, 0},
+    {2, 3},
+    {5, 4},
+    {6, 7}
 };
 
 // ================================================================
